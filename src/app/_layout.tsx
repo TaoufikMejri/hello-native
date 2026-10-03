@@ -13,6 +13,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ title: 'Hello Native' }} />
         <Stack.Screen name="sign-up" options={{ title: 'Sign Up' }} />
         <Stack.Screen name="login" options={{ title: 'Log In' }} />
+        <Stack.Screen name="welcome" options={{ title: 'Welcome', headerBackVisible: false }} />
       </Stack>
       <StatusBar style="auto" />
     </>

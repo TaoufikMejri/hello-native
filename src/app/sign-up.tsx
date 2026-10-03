@@ -1,11 +1,13 @@
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ApiError, signup } from '../api';
+import { saveToken } from '../authStorage';
 import { FormField } from '../components/FormField';
 import { colors } from '../theme';
 import { isValidEmail } from '../validation';
 
-type Errors = Partial<Record<'fullName' | 'email' | 'password' | 'confirmPassword', string>>;
+type Errors = Partial<Record<'fullName' | 'email' | 'password' | 'confirmPassword' | 'form', string>>;
 
 export default function SignUp() {
   const [fullName, setFullName] = useState('');
@@ -13,8 +15,9 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<Errors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const nextErrors: Errors = {};
     if (!fullName.trim()) nextErrors.fullName = 'Enter your full name';
     if (!isValidEmail(email)) nextErrors.email = 'Enter a valid email address';
@@ -24,8 +27,17 @@ export default function SignUp() {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    // TODO: replace with a call to the Rails API once the backend exists.
-    router.push('/');
+    setIsSubmitting(true);
+    try {
+      const { token, user } = await signup({ name: fullName.trim(), email: email.trim(), password });
+      await saveToken(token);
+      router.replace({ pathname: '/welcome', params: { name: user.name } });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.errors.join(', ') : 'Something went wrong. Check your connection.';
+      setErrors({ form: message });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -65,8 +77,18 @@ export default function SignUp() {
         error={errors.confirmPassword}
       />
 
-      <Pressable style={styles.submitButton} onPress={handleSubmit}>
-        <Text style={styles.submitButtonText}>Sign Up</Text>
+      {errors.form ? <Text style={styles.formError}>{errors.form}</Text> : null}
+
+      <Pressable
+        style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+        onPress={handleSubmit}
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? (
+          <ActivityIndicator color={colors.primaryText} />
+        ) : (
+          <Text style={styles.submitButtonText}>Sign Up</Text>
+        )}
       </Pressable>
 
       <View style={styles.footer}>
@@ -101,10 +123,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
   submitButtonText: {
     color: colors.primaryText,
     fontSize: 16,
     fontWeight: '600',
+  },
+  formError: {
+    color: colors.error,
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',

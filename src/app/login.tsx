@@ -1,18 +1,21 @@
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ApiError, login } from '../api';
+import { saveToken } from '../authStorage';
 import { FormField } from '../components/FormField';
 import { colors } from '../theme';
 import { isValidEmail } from '../validation';
 
-type Errors = Partial<Record<'email' | 'password', string>>;
+type Errors = Partial<Record<'email' | 'password' | 'form', string>>;
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<Errors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const nextErrors: Errors = {};
     if (!isValidEmail(email)) nextErrors.email = 'Enter a valid email address';
     if (!password) nextErrors.password = 'Enter your password';
@@ -20,8 +23,17 @@ export default function Login() {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    // TODO: replace with a call to the Rails API once the backend exists.
-    router.push('/');
+    setIsSubmitting(true);
+    try {
+      const { token, user } = await login({ email: email.trim(), password });
+      await saveToken(token);
+      router.replace({ pathname: '/welcome', params: { name: user.name } });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.errors.join(', ') : 'Something went wrong. Check your connection.';
+      setErrors({ form: message });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -45,8 +57,18 @@ export default function Login() {
         error={errors.password}
       />
 
-      <Pressable style={styles.submitButton} onPress={handleSubmit}>
-        <Text style={styles.submitButtonText}>Log In</Text>
+      {errors.form ? <Text style={styles.formError}>{errors.form}</Text> : null}
+
+      <Pressable
+        style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+        onPress={handleSubmit}
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? (
+          <ActivityIndicator color={colors.primaryText} />
+        ) : (
+          <Text style={styles.submitButtonText}>Log In</Text>
+        )}
       </Pressable>
 
       <View style={styles.footer}>
@@ -81,10 +103,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
   submitButtonText: {
     color: colors.primaryText,
     fontSize: 16,
     fontWeight: '600',
+  },
+  formError: {
+    color: colors.error,
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',
